@@ -2,15 +2,8 @@ from nicegui import ui
 
 from gui.base import GuiPage, GuiSession, gui_routes
 
-BUTTON_OPTIONS = {
-    "dashboard": "Open results dashboard",
-    "export": "Export raw output files",
-    "open_folder": "Open results folder",
-}
-
 
 class PostAnalysisPage(GuiPage):
-
     def __init__(self, session: GuiSession):
         super().__init__(
             session=session,
@@ -35,10 +28,20 @@ class PostAnalysisPage(GuiPage):
 
             # Action buttons row
             with ui.row().classes("gap-4"):
+                ui.button(
+                    "Open results dashboard",
+                    on_click=lambda: self.navigate_to(gui_routes.dashboard),
+                    color="primary",
+                )
 
-                for btn_label in BUTTON_OPTIONS.values():
-                    ui.button(
-                        btn_label,
-                        on_click=ui.notify("Coming soon!"),
-                        color="primary",
-                    )
+                ui.button(
+                    "Export raw output files",
+                    on_click=lambda: self.notify_warning("Coming soon!"),
+                    color="primary",
+                ).set_enabled(False)
+
+                ui.button(
+                    "Open results folder",
+                    on_click=lambda: self.notify_warning("Coming soon!"),
+                    color="primary",
+                ).set_enabled(False)
