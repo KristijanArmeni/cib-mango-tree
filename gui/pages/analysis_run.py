@@ -168,8 +168,8 @@ class RunAnalysisPage(GuiPage):
                         # Allow UI to update
                         await asyncio.sleep(0.01)
 
-                    # Store completed analysis in session
-                    self.session.current_analysis = analysis
+                    # Store completed analysis in session (AnalysisModel, not AnalysisContext)
+                    self.session.current_analysis = analysis.model
 
                     # Update buttons
                     success_btn.set_visibility(True)
