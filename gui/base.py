@@ -44,6 +44,7 @@ class GuiRoutes(BaseModel):
     preview_dataset: str = "/preview_dataset"
     run_analysis: str = "/run_analysis"
     post_analysis: str = "/post_analysis"
+    dashboard: str = "/dashboard"
 
 
 class GuiColors(BaseModel):
