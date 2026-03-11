@@ -157,7 +157,15 @@ def plot_scatter_echart(data: pl.DataFrame) -> dict:
                     "borderWidth": 0.5,
                 },
                 "emphasis": {
-                    "itemStyle": {"opacity": 1.0, "shadowBlur": 5},
+                    "itemStyle": {
+                        "color": "#d62728",  # Highlight red color
+                        "opacity": 1.0,
+                        "borderColor": "white",
+                        "borderWidth": 2,
+                        "shadowBlur": 10,
+                        "shadowColor": "rgba(0, 0, 0, 0.3)",
+                    },
+                    "scale": 1.5,  # Make point 50% larger when emphasized
                 },
                 "data": series_data,
             }
