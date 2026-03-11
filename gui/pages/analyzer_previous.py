@@ -69,7 +69,36 @@ class SelectPreviousAnalyzerPage(GuiPage):
                     self.notify_warning("Please select a previous analysis")
                     return
 
-                self.notify_warning("Coming soon!")
+                selected_id = selected_rows[0].get("analysis_id")
+                if not selected_id:
+                    self.notify_error("Selected row is missing analysis ID")
+                    return
+
+                selected_context = next(
+                    (ctx for ctx in self.analysis_contexts if ctx.id == selected_id),
+                    None,
+                )
+
+                if selected_context is None:
+                    self.notify_error(f"Analysis '{selected_id}' not found in project")
+                    return
+
+                if selected_context.is_draft:
+                    self.notify_warning(
+                        "This analysis is incomplete and cannot be viewed. "
+                        "Please select a completed analysis."
+                    )
+                    return
+
+                self.session.current_analysis = selected_context.model
+                self.session.selected_analyzer = selected_context.analyzer_spec
+                self.session.selected_analyzer_name = (
+                    selected_context.analyzer_spec.name
+                )
+                self.session.column_mapping = selected_context.column_mapping
+                self.session.analysis_params = selected_context.backfilled_param_values
+
+                self.navigate_to(gui_routes.post_analysis)
 
             async def _on_manage_analyses():
                 """Handle manage analyses button click."""
