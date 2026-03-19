@@ -9,15 +9,12 @@ from gui.base import GuiSession, gui_routes
 from gui.context import GUIContext
 from gui.dashboards import BaseDashboardPage, NgramsDashboardPage
 from gui.pages import (
-    ConfigureAnalaysisParams,
-    ConfigureAnalysisDatasetPage,
+    AnalysisConfigPage,
     ImportDatasetPage,
     NewProjectPage,
     PostAnalysisPage,
     PreviewDatasetPage,
-    RunAnalysisPage,
     SelectAnalyzerForkPage,
-    SelectNewAnalyzerPage,
     SelectPreviousAnalyzerPage,
     SelectProjectPage,
     StartPage,
@@ -102,34 +99,16 @@ def gui_main(app: App):
         page = SelectAnalyzerForkPage(session=gui_session)
         page.render()
 
-    @ui.page(gui_routes.select_analyzer)
-    def select_analyzer():
-        """New analyzer selection page using GuiPage abstraction."""
-        page = SelectNewAnalyzerPage(session=gui_session)
+    @ui.page(gui_routes.configure_analysis)
+    def configure_analysis():
+        """Combined analysis configuration page with stepper."""
+        page = AnalysisConfigPage(session=gui_session)
         page.render()
 
     @ui.page(gui_routes.select_previous_analyzer)
     def select_previous_analyzer():
         """Previous analyzer selection page using GuiPage abstraction."""
         page = SelectPreviousAnalyzerPage(session=gui_session)
-        page.render()
-
-    @ui.page(gui_routes.configure_analysis_dataset)
-    def configure_analysis_dataset():
-        """Renders page where user selects dataset columns and previews."""
-        page = ConfigureAnalysisDatasetPage(session=gui_session)
-        page.render()
-
-    @ui.page(gui_routes.configure_analysis_parameters)
-    def configure_analysis_parameters():
-        """Render page to allow user to configure analysis parameters."""
-        page = ConfigureAnalaysisParams(session=gui_session)
-        page.render()
-
-    @ui.page(gui_routes.run_analysis)
-    def run_analysis():
-        """Render page that runs the analysis with selected parameters."""
-        page = RunAnalysisPage(session=gui_session)
         page.render()
 
     @ui.page(gui_routes.post_analysis)
