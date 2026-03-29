@@ -2,7 +2,7 @@ import os
 from functools import cached_property
 from multiprocessing import Event, Queue
 from tempfile import TemporaryDirectory
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 

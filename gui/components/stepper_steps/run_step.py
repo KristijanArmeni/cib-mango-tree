@@ -1,5 +1,5 @@
 from asyncio import sleep
-from multiprocessing import Event, Manager
+from multiprocessing import Manager
 from queue import Empty
 from traceback import format_exc
 
