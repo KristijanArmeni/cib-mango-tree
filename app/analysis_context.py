@@ -1,7 +1,8 @@
 import os
 from functools import cached_property
+from multiprocessing import Event, Queue
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -21,13 +22,22 @@ from .app_context import AppContext
 from .project_context import ProjectContext
 
 
+class AnalysisQueueMessage(BaseModel):
+    type: Literal[
+        "analyzer_start", "analyzer_finish", "log", "error", "complete", "cancelled"
+    ]
+    analyzer_id: str | None = None
+    analyzer_name: str | None = None
+    message: str | None = None
+    progress: float | None = None
+
+
 class AnalysisRunProgressEvent(BaseModel):
     analyzer: AnalyzerDeclaration | SecondaryAnalyzerDeclaration
     event: Literal["start", "finish"]
 
 
 class AnalysisContext(BaseModel):
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     app_context: AppContext
@@ -132,6 +142,165 @@ class AnalysisContext(BaseModel):
 
         self.model.is_draft = False
         self.app_context.storage.save_analysis(self.model)
+
+    @staticmethod
+    def run_worker(
+        analysis_model: AnalysisModel,
+        analyzer_id: str,
+        column_mapping: dict[str, str],
+        input_columns_data: dict[str, tuple[str, str]],
+        secondary_analyzer_ids: list[str],
+        storage,
+        queue: Queue,
+        cancel_event: Event,
+    ) -> AnalysisModel:
+        """
+        Static method to run analysis in a separate process.
+
+        This method is designed to be called via ui.run.cpu_bound().
+
+        Args:
+            analysis_model: The analysis model
+            analyzer_id: The primary analyzer ID
+            column_mapping: Mapping from analyzer column names to user column names
+            input_columns_data: Dict of analyzer_column_name -> (user_column_name, semantic_name)
+            secondary_analyzer_ids: List of secondary analyzer IDs
+            storage: Storage instance
+            queue: Multiprocessing queue for progress messages
+            cancel_event: Multiprocessing event to signal cancellation
+
+        Returns:
+            The updated analysis model (is_draft=False on success)
+        """
+        from analyzers import suite
+        from preprocessing.series_semantic import all_semantics
+
+        analyzer_spec = suite.get_primary_analyzer(analyzer_id)
+        if analyzer_spec is None:
+            queue.put(
+                AnalysisQueueMessage(
+                    type="error",
+                    message=f"Analyzer '{analyzer_id}' not found",
+                ).model_dump()
+            )
+            return analysis_model
+
+        secondary_analyzers = [
+            sec
+            for sec_id in secondary_analyzer_ids
+            if (sec := suite.get_secondary_analyzer_by_id(analyzer_id, sec_id))
+            is not None
+        ]
+
+        semantic_lookup = {s.semantic_name: s for s in all_semantics}
+
+        def send_message(msg: AnalysisQueueMessage):
+            queue.put(msg.model_dump())
+
+        def check_cancelled() -> bool:
+            return cancel_event.is_set()
+
+        try:
+            with TemporaryDirectory() as temp_dir:
+                if check_cancelled():
+                    send_message(AnalysisQueueMessage(type="cancelled"))
+                    return analysis_model
+
+                send_message(
+                    AnalysisQueueMessage(
+                        type="analyzer_start",
+                        analyzer_id=analyzer_spec.id,
+                        analyzer_name=analyzer_spec.name,
+                    )
+                )
+
+                input_columns = {
+                    analyzer_col_name: InputColumnProvider(
+                        user_column_name=user_col_name,
+                        semantic=semantic_lookup[semantic_name],
+                    )
+                    for analyzer_col_name, (
+                        user_col_name,
+                        semantic_name,
+                    ) in input_columns_data.items()
+                }
+
+                analyzer_context = PrimaryAnalyzerContext(
+                    analysis=analysis_model,
+                    analyzer=analyzer_spec,
+                    store=storage,
+                    temp_dir=temp_dir,
+                    input_columns=input_columns,
+                )
+                analyzer_context.prepare()
+
+                if check_cancelled():
+                    send_message(AnalysisQueueMessage(type="cancelled"))
+                    return analysis_model
+
+                analyzer_spec.entry_point(analyzer_context)
+
+                if check_cancelled():
+                    send_message(AnalysisQueueMessage(type="cancelled"))
+                    return analysis_model
+
+                send_message(
+                    AnalysisQueueMessage(
+                        type="analyzer_finish",
+                        analyzer_id=analyzer_spec.id,
+                        analyzer_name=analyzer_spec.name,
+                    )
+                )
+
+            for secondary_spec in secondary_analyzers:
+                if check_cancelled():
+                    send_message(AnalysisQueueMessage(type="cancelled"))
+                    return analysis_model
+
+                send_message(
+                    AnalysisQueueMessage(
+                        type="analyzer_start",
+                        analyzer_id=secondary_spec.id,
+                        analyzer_name=secondary_spec.name,
+                    )
+                )
+
+                with TemporaryDirectory() as temp_dir:
+                    secondary_context = SecondaryAnalyzerContext(
+                        analysis=analysis_model,
+                        secondary_analyzer=secondary_spec,
+                        temp_dir=temp_dir,
+                        store=storage,
+                    )
+                    secondary_context.prepare()
+
+                    if check_cancelled():
+                        send_message(AnalysisQueueMessage(type="cancelled"))
+                        return analysis_model
+
+                    secondary_spec.entry_point(secondary_context)
+
+                send_message(
+                    AnalysisQueueMessage(
+                        type="analyzer_finish",
+                        analyzer_id=secondary_spec.id,
+                        analyzer_name=secondary_spec.name,
+                    )
+                )
+
+            analysis_model.is_draft = False
+            storage.save_analysis(analysis_model)
+            send_message(AnalysisQueueMessage(type="complete"))
+            return analysis_model
+
+        except Exception as e:
+            send_message(
+                AnalysisQueueMessage(
+                    type="error",
+                    message=str(e),
+                )
+            )
+            raise
 
     @property
     def export_root_path(self):
