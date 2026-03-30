@@ -2,7 +2,7 @@ import os
 from functools import cached_property
 from multiprocessing import Event, Queue
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Callable, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -11,6 +11,7 @@ from analyzer_interface import (
     SecondaryAnalyzerDeclaration,
     backfill_param_values,
 )
+from analyzer_interface.context import ProgressReporterProtocol
 from context import (
     InputColumnProvider,
     PrimaryAnalyzerContext,
@@ -24,10 +25,20 @@ from .project_context import ProjectContext
 
 class AnalysisQueueMessage(BaseModel):
     type: Literal[
-        "analyzer_start", "analyzer_finish", "log", "error", "complete", "cancelled"
+        "analyzer_start",
+        "analyzer_finish",
+        "step_start",
+        "step_progress",
+        "step_finish",
+        "log",
+        "error",
+        "complete",
+        "cancelled",
     ]
     analyzer_id: str | None = None
     analyzer_name: str | None = None
+    step_name: str | None = None
+    step_progress: float | None = None
     message: str | None = None
     progress: float | None = None
 
@@ -99,11 +110,17 @@ class AnalysisContext(BaseModel):
         self.app_context.storage.delete_analysis(self.model)
 
     def run(self):
+        from terminal_tools import ProgressReporter
+
         assert not self.is_deleted, "Analysis is deleted"
         secondary_analyzers = (
             self.app_context.suite.find_toposorted_secondary_analyzers(
                 self.analyzer_spec
             )
+        )
+
+        progress_reporter_factory: Callable[[str], ProgressReporterProtocol] = (
+            lambda step_name: ProgressReporter(step_name)
         )
 
         with TemporaryDirectory() as temp_dir:
@@ -122,6 +139,7 @@ class AnalysisContext(BaseModel):
                     )
                     for analyzer_column_name, user_column_name in self.column_mapping.items()
                 },
+                progress_reporter=progress_reporter_factory,
             )
             analyzer_context.prepare()
             self.analyzer_spec.entry_point(analyzer_context)
@@ -135,6 +153,7 @@ class AnalysisContext(BaseModel):
                     secondary_analyzer=secondary,
                     temp_dir=temp_dir,
                     store=self.app_context.storage,
+                    progress_reporter=progress_reporter_factory,
                 )
                 analyzer_context.prepare()
                 secondary.entry_point(analyzer_context)
@@ -177,6 +196,8 @@ class AnalysisContext(BaseModel):
         from analyzers import suite
         from preprocessing.series_semantic import all_semantics
 
+        from .gui_progress_reporter import GUIProgressReporter
+
         analyzer_spec = suite.get_primary_analyzer(analyzer_id)
         if analyzer_spec is None:
             queue.put(
@@ -201,6 +222,19 @@ class AnalysisContext(BaseModel):
 
         def check_cancelled() -> bool:
             return cancel_event.is_set()
+
+        def make_progress_reporter(
+            analyzer_id: str, analyzer_name: str
+        ) -> Callable[[str], ProgressReporterProtocol]:
+            def factory(step_name: str) -> ProgressReporterProtocol:
+                return GUIProgressReporter(
+                    queue=queue,
+                    analyzer_id=analyzer_id,
+                    analyzer_name=analyzer_name,
+                    step_name=step_name,
+                )
+
+            return factory
 
         try:
             with TemporaryDirectory() as temp_dir:
@@ -233,6 +267,9 @@ class AnalysisContext(BaseModel):
                     store=storage,
                     temp_dir=temp_dir,
                     input_columns=input_columns,
+                    progress_reporter=make_progress_reporter(
+                        analyzer_spec.id, analyzer_spec.name
+                    ),
                 )
                 analyzer_context.prepare()
 
@@ -273,6 +310,9 @@ class AnalysisContext(BaseModel):
                         secondary_analyzer=secondary_spec,
                         temp_dir=temp_dir,
                         store=storage,
+                        progress_reporter=make_progress_reporter(
+                            secondary_spec.id, secondary_spec.name
+                        ),
                     )
                     secondary_context.prepare()
 
