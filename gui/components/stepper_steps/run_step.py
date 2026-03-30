@@ -121,7 +121,12 @@ class RunAnalysisStep:
             .classes("items-center justify-center gap-6")
             .style("width: 600px; max-width: 90vw; padding: 2rem;"),
         ):
-            analyzer_header = ui.label(analyzer.name).classes("text-xl font-bold")
+            analyzer_header = ui.label(analyzer.name).classes("text-xl font-semibold")
+            status_label = (
+                ui.label("Initializing...")
+                .classes("text-base text-medium")
+                .style(f"color: {MANGO_ORANGE}")
+            )
 
             step_list_container = ui.column().classes("w-full gap-1 mt-4")
 
@@ -162,6 +167,7 @@ class RunAnalysisStep:
 
             if msg.type == "analyzer_start":
                 analyzer_header.text = msg.analyzer_name or "Analyzer"
+                status_label.text = "Analysis starting..."
                 step_rows.clear()
                 current_step_name = None
 
@@ -170,16 +176,23 @@ class RunAnalysisStep:
 
             elif msg.type == "step_start":
                 step_name = msg.step_name or "Processing..."
+
+                if current_step_name and current_step_name in step_rows:
+                    _, _, prev_label = step_rows[current_step_name]
+                    prev_label.classes(add="text-gray-600", remove="text-medium")
+                    prev_label.style("")
+
                 current_step_name = step_name
+                status_label.text = "Running analysis..."
 
                 with step_list_container:
                     with ui.row().classes("items-center gap-2"):
-                        spinner = ui.spinner("gears", size="sm", color=MANGO_ORANGE)
+                        spinner = ui.spinner("gears", size="sm")
                         checkmark = ui.icon(
                             "check_circle", color=MANGO_DARK_GREEN, size="sm"
                         )
                         checkmark.set_visibility(False)
-                        label = ui.label(step_name)
+                        label = ui.label(step_name).classes("text-medium")
                 step_rows[step_name] = (spinner, checkmark, label)
 
             elif msg.type == "step_finish":
@@ -187,6 +200,8 @@ class RunAnalysisStep:
                     spinner, checkmark, label = step_rows[current_step_name]
                     spinner.set_visibility(False)
                     checkmark.set_visibility(True)
+                    label.classes(add="text-gray-600", remove="text-medium")
+                    label.style("")
                     label.text = current_step_name
                 current_step_name = None
 
@@ -212,6 +227,7 @@ class RunAnalysisStep:
 
             elif msg.type in ("complete", "cancelled"):
                 analysis_complete = True
+                status_label.set_visibility(False)
                 if msg.type == "complete":
                     self.session.current_analysis = analysis.model
                     success_btn.set_visibility(True)
