@@ -371,18 +371,24 @@ class NgramsDashboardPage(BaseDashboardPage):
 
     def _get_filtered_stats(self) -> pl.DataFrame:
         """
-        Get df_stats filtered by the current filter text.
+        Return a filtered view of the n-gram stats.
 
-        Returns:
-            Filtered DataFrame or full df_stats if no filter is active
+        - No active filter  → returns self._df_stats_sampled (fast default view)
+        - Active filter     → searches self._df_stats (full data) so users can
+                              find any n-gram, not just those in the sampled view.
         """
         if self._df_stats is None:
             return pl.DataFrame()
 
         if not self._filter_text:
-            return self._df_stats
+            # Default: return sampled data for performance
+            return (
+                self._df_stats_sampled
+                if self._df_stats_sampled is not None
+                else self._df_stats
+            )
 
-        # Substring/contains match (case-insensitive)
+        # Filter: always search full dataset
         return self._df_stats.filter(
             pl.col(COL_NGRAM_WORDS).str.contains(f"(?i){self._filter_text}")
         )
@@ -545,24 +551,19 @@ class NgramsDashboardPage(BaseDashboardPage):
         self._update_sampling_info_label()
 
     def _update_chart_with_filter(self) -> None:
-        """
-        Re-render the chart with filtered data.
-
-        Applies the current filter text to show only matching n-grams.
-        """
+        """Re-render the chart with the currently filtered data."""
         if self._chart is None:
             return
 
         df_filtered = self._get_filtered_stats()
 
         if df_filtered.is_empty():
-            # Show empty chart state
             self._chart.options.clear()
             self._chart.update()
             return
 
-        # Build ECharts option with filtered data
-        option = plot_scatter_echart(df_filtered)
+        # Filter results are already a small subset — run synchronously
+        option = plot_scatter_echart(df_filtered, enable_large_mode=True)
         self._chart.options.update(option)
         self._chart.update()
 
