@@ -410,6 +410,140 @@ class NgramsDashboardPage(BaseDashboardPage):
         self._update_grid()
         self._update_info_label()
 
+    async def _load_and_render_async(self) -> None:
+        """
+        Load parquet data and build the chart, fully off the main thread.
+
+        Call order:
+            1. run.io_bound  → read parquet files
+            2. run.cpu_bound → sample data          (plots.sample_ngram_data)
+            3. run.cpu_bound → build ECharts option (plots.plot_scatter_echart)
+            4. Main thread   → push to UI
+        """
+        stats_path = self._get_parquet_path(OUTPUT_NGRAM_STATS)
+        full_path = self._get_parquet_path(OUTPUT_NGRAM_FULL)
+
+        if stats_path is None:
+            self._show_error(
+                self._chart_loading, "No analysis found in the current session."
+            )
+            return
+
+        # --- Step 1: I/O-bound parquet reads ---
+        try:
+            self._df_stats = await run.io_bound(pl.read_parquet, stats_path)
+            if full_path:
+                self._df_full = await run.io_bound(pl.read_parquet, full_path)
+        except Exception as exc:
+            self._show_error(
+                self._chart_loading, f"Could not load n-gram results: {exc}"
+            )
+            return
+
+        if self._df_stats.is_empty():
+            self._show_error(self._chart_loading, "No n-gram data available.")
+            return
+
+        # --- Steps 2 & 3: CPU-bound sampling + chart building ---
+        try:
+            self._df_stats_sampled, self._sampling_metadata = await run.cpu_bound(
+                sample_ngram_data,
+                self._df_stats,
+                50000,
+            )
+            option = await run.cpu_bound(
+                plot_scatter_echart,
+                self._df_stats_sampled,
+                True,
+            )
+        except Exception as exc:
+            self._show_error(self._chart_loading, f"Could not build chart: {exc}")
+            return
+
+        # --- Step 4: Populate autocomplete from FULL data ---
+        if self._ngram_select is not None:
+            self._all_ngram_options = (
+                self._df_stats.select(pl.col(COL_NGRAM_WORDS).unique())
+                .sort(COL_NGRAM_WORDS)
+                .to_series()
+                .to_list()
+            )
+            self._ngram_select.set_autocomplete(self._all_ngram_options)
+
+        # --- Step 5: Push to UI (main thread) ---
+        self._chart.options.update(option)
+        self._chart.update()
+        self._show_content(self._chart_loading, self._chart_content)
+
+        self._update_sampling_info_label()
+        self._update_info_label()
+        self._update_grid()
+        self._show_content(self._grid_loading, self._grid_content)
+
+    def _update_sampling_info_label(self) -> None:
+        """Update the sampling label and show/hide the 'Show all' button."""
+        if self._sampling_label is None or self._sampling_metadata is None:
+            return
+        self._sampling_label.text = self._sampling_metadata.sampling_message
+        if self._show_all_btn is not None:
+            self._show_all_btn.set_visibility(self._sampling_metadata.is_sampled)
+
+    async def _handle_show_all_click(self) -> None:
+        """Show confirmation dialog for very large datasets, then load all data."""
+        if self._df_stats is None:
+            return
+
+        total = len(self._df_stats)
+
+        if total > 100_000:
+            with ui.dialog() as dialog, ui.card():
+                ui.label(f"Load all {total:,} data points?").classes("text-h6")
+                ui.label(
+                    "This may cause the browser to slow down or become unresponsive."
+                ).classes("text-body2 text-grey-7")
+                with ui.row().classes("gap-4 justify-end"):
+                    ui.button("Cancel", on_click=dialog.close).props("flat")
+
+                    async def _confirm():
+                        dialog.close()
+                        await self._load_full_dataset()
+
+                    ui.button("Load all", on_click=_confirm, color="primary")
+            dialog.open()
+        else:
+            await self._load_full_dataset()
+
+    async def _load_full_dataset(self) -> None:
+        """Rebuild the chart from the complete (unsampled) dataset."""
+        if self._show_all_btn is not None:
+            self._show_all_btn.set_enabled(False)
+        if self._sampling_label is not None:
+            self._sampling_label.text = "Loading full dataset..."
+
+        try:
+            option = await run.cpu_bound(
+                plot_scatter_echart,
+                self._df_stats,
+                True,
+            )
+        except Exception as exc:
+            self.notify_error(f"Could not load full dataset: {exc}")
+            if self._show_all_btn is not None:
+                self._show_all_btn.set_enabled(True)
+            return
+
+        self._df_stats_sampled = self._df_stats
+        self._sampling_metadata = SamplingMetadata(
+            total_count=len(self._df_stats),
+            sampled_count=len(self._df_stats),
+            is_sampled=False,
+            strategy="none",
+        )
+
+        self._chart.options.update(option)
+        self._chart.update()
+        self._update_sampling_info_label()
+
     def _update_chart_with_filter(self) -> None:
         """
         Re-render the chart with filtered data.
