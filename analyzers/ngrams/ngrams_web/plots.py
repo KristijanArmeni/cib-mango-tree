@@ -225,7 +225,7 @@ def plot_scatter_echart(
                     "color": "#d62728",  # Highlight red color
                     "opacity": 1.0,
                     "borderColor": "white",
-                    "borderWidth": 2,
+                    "borderWidth": 1,
                     "shadowBlur": 10,
                     "shadowColor": "rgba(0, 0, 0, 0.3)",
                 },
