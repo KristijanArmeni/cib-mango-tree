@@ -51,15 +51,18 @@ class NgramsDashboardPage(BaseDashboardPage):
         self._selected_words: str | None = None
         self._selected_series_index: int | None = None
         self._selected_data_index: int | None = None
+
         # State for filter
         self._filter_text: str | None = None
         self._filter_applied: bool = False
         self._all_ngram_options: list[str] = []
+
         # DataFrames
         self._df_stats: pl.DataFrame | None = None
         self._df_full: pl.DataFrame | None = None
         self._df_stats_sampled: pl.DataFrame | None = None
         self._sampling_metadata: SamplingMetadata | None = None
+
         # UI component references (set during render)
         self._chart: ui.echart | None = None
         self._grid: ui.aggrid | None = None
@@ -264,8 +267,6 @@ class NgramsDashboardPage(BaseDashboardPage):
             series_index: Index of the series containing the point
             data_index: Index of the data point within the series
         """
-        if self._chart is None:
-            return
         self._chart.run_chart_method(
             "dispatchAction",
             {"type": "downplay", "seriesIndex": series_index, "dataIndex": data_index},
@@ -278,8 +279,6 @@ class NgramsDashboardPage(BaseDashboardPage):
         Calling dispatchAction with type 'downplay' without specifying
         seriesIndex/dataIndex will downplay all highlighted elements.
         """
-        if self._chart is None:
-            return
         self._chart.run_chart_method("dispatchAction", {"type": "downplay"})
 
     def _handle_point_click(self, e) -> None:
@@ -430,9 +429,10 @@ class NgramsDashboardPage(BaseDashboardPage):
         full_path = self._get_parquet_path(OUTPUT_NGRAM_FULL)
 
         if stats_path is None:
-            self._show_error(
-                self._chart_loading, "No analysis found in the current session."
-            )
+            if self._chart_loading is not None:
+                self._show_error(
+                    self._chart_loading, "No analysis found in the current session."
+                )
             return
 
         # --- Step 1: I/O-bound parquet reads ---
@@ -441,13 +441,15 @@ class NgramsDashboardPage(BaseDashboardPage):
             if full_path:
                 self._df_full = await run.io_bound(pl.read_parquet, full_path)
         except Exception as exc:
-            self._show_error(
-                self._chart_loading, f"Could not load n-gram results: {exc}"
-            )
+            if self._chart_loading is not None:
+                self._show_error(
+                    self._chart_loading, f"Could not load n-gram results: {exc}"
+                )
             return
 
         if self._df_stats.is_empty():
-            self._show_error(self._chart_loading, "No n-gram data available.")
+            if self._chart_loading is not None:
+                self._show_error(self._chart_loading, "No n-gram data available.")
             return
 
         # --- Steps 2 & 3: CPU-bound sampling + chart building ---
@@ -460,10 +462,11 @@ class NgramsDashboardPage(BaseDashboardPage):
             option = await run.cpu_bound(
                 plot_scatter_echart,
                 self._df_stats_sampled,
-                True,
+                False,
             )
         except Exception as exc:
-            self._show_error(self._chart_loading, f"Could not build chart: {exc}")
+            if self._chart_loading is not None:
+                self._show_error(self._chart_loading, f"Could not build chart: {exc}")
             return
 
         # --- Step 4: Populate autocomplete from FULL data ---
@@ -477,6 +480,12 @@ class NgramsDashboardPage(BaseDashboardPage):
             self._ngram_select.set_autocomplete(self._all_ngram_options)
 
         # --- Step 5: Push to UI (main thread) ---
+        if (
+            self._chart is None
+            or self._chart_content is None
+            or self._chart_loading is None
+        ):
+            return
         self._chart.options.update(option)
         self._chart.update()
         self._show_content(self._chart_loading, self._chart_content)
@@ -484,7 +493,8 @@ class NgramsDashboardPage(BaseDashboardPage):
         self._update_sampling_info_label()
         self._update_info_label()
         self._update_grid()
-        self._show_content(self._grid_loading, self._grid_content)
+        if self._grid_loading is not None and self._grid_content is not None:
+            self._show_content(self._grid_loading, self._grid_content)
 
     def _update_sampling_info_label(self) -> None:
         """Update the sampling label and show/hide the 'Show all' button."""
@@ -526,11 +536,16 @@ class NgramsDashboardPage(BaseDashboardPage):
         if self._sampling_label is not None:
             self._sampling_label.text = "Loading full dataset..."
 
+        if self._df_stats is None:
+            return
+
+        df_stats = self._df_stats
+
         try:
             option = await run.cpu_bound(
                 plot_scatter_echart,
-                self._df_stats,
-                True,
+                df_stats,
+                False,
             )
         except Exception as exc:
             self.notify_error(f"Could not load full dataset: {exc}")
@@ -538,16 +553,17 @@ class NgramsDashboardPage(BaseDashboardPage):
                 self._show_all_btn.set_enabled(True)
             return
 
-        self._df_stats_sampled = self._df_stats
+        self._df_stats_sampled = df_stats
         self._sampling_metadata = SamplingMetadata(
-            total_count=len(self._df_stats),
-            sampled_count=len(self._df_stats),
+            total_count=len(df_stats),
+            sampled_count=len(df_stats),
             is_sampled=False,
             strategy="none",
         )
 
-        self._chart.options.update(option)
-        self._chart.update()
+        if self._chart is not None:
+            self._chart.options.update(option)
+            self._chart.update()
         self._update_sampling_info_label()
 
     def _update_chart_with_filter(self) -> None:
@@ -563,7 +579,7 @@ class NgramsDashboardPage(BaseDashboardPage):
             return
 
         # Filter results are already a small subset — run synchronously
-        option = plot_scatter_echart(df_filtered, enable_large_mode=True)
+        option = plot_scatter_echart(df_filtered, enable_large_mode=False)
         self._chart.options.update(option)
         self._chart.update()
 
