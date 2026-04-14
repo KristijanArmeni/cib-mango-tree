@@ -595,6 +595,15 @@ class NgramsDashboardPage(BaseDashboardPage):
 
     def render_content(self) -> None:
         """Render the scatter plot and data grid with loading states."""
+        ui.add_css(
+            """
+            .ag-tooltip {
+                white-space: normal !important;
+                max-width: 450px !important;
+                word-wrap: break-word !important;
+            }
+        """
+        )
         with ui.row().classes("w-full justify-center"):
             with ui.column().classes("w-3/4 q-pa-md gap-4"):
                 # Scatter plot card
