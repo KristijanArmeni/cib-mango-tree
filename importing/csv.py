@@ -5,8 +5,6 @@ from io import BytesIO
 import polars as pl
 from pydantic import BaseModel, ConfigDict
 
-import terminal_tools.prompts as prompts
-
 from .importer import Importer, ImporterSession
 
 
@@ -186,6 +184,8 @@ class CSVImporterTerminal(CSVImporter):
         )
 
     def modify_session(self, import_session: "CsvImportSession", reset_screen):
+        import terminal_tools.prompts as prompts
+
         is_first_time = True
         while True:
             reset_screen(import_session)
@@ -233,11 +233,9 @@ class CSVImporterTerminal(CSVImporter):
 
     @staticmethod
     def _separator_option(previous_value):
-        from typing import Optional
-
         import terminal_tools.prompts as prompts
 
-        input: Optional[str] = prompts.list_input(
+        input: str | None = prompts.list_input(
             "Select the column separator",
             choices=[
                 ("comma (,)", ","),
@@ -269,7 +267,7 @@ class CSVImporterTerminal(CSVImporter):
     def _quote_char_option(previous_value):
         import terminal_tools.prompts as prompts
 
-        input: Optional[str] = prompts.list_input(
+        input: str | None = prompts.list_input(
             "Select the quote character",
             choices=[
                 ('Double quote (")', '"'),
