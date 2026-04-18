@@ -24,7 +24,7 @@ from gui.constants.colors import (
     MANGO_ORANGE_LIGHT,
 )
 from gui.context import GUIContext
-from importing import ImporterSession
+from importing.importer import ImporterSession
 from storage import AnalysisModel
 
 
