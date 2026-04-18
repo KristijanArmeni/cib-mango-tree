@@ -6,7 +6,10 @@ from nicegui import ui
 
 from gui.base import GuiPage, GuiSession, gui_routes
 from gui.import_options import ImportOptionsDialog
-from importing import importers
+from importing.csv import CSVImporter
+from importing.excel import ExcelImporter
+
+importers = [CSVImporter(), ExcelImporter()]
 
 
 class PreviewDatasetPage(GuiPage):
