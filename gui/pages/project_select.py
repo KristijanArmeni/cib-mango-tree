@@ -1,6 +1,8 @@
 from nicegui import ui
 
-from gui.base import GuiPage, GuiSession, gui_routes
+from gui.base import GuiPage
+from gui.routes import gui_routes
+from gui.session import GuiSession
 
 
 class SelectProjectPage(GuiPage):
@@ -75,7 +77,7 @@ class SelectProjectPage(GuiPage):
 
                     async def open_manage_projects():
                         """Open the Manage Projects dialog."""
-                        from gui.projects import ManageProjectsDialog
+                        from gui.components.manage_projects import ManageProjectsDialog
 
                         dialog = ManageProjectsDialog(session=self.session)
                         result = await dialog

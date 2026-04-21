@@ -3,8 +3,8 @@ from datetime import datetime
 from nicegui import ui
 
 from app.analysis_context import AnalysisContext
-from components.select_analysis import present_timestamp
-from gui.base import GuiSession
+from gui.components.analysis_utils import present_timestamp
+from gui.session import GuiSession
 
 
 class ManageAnalysisDialog(ui.dialog):
