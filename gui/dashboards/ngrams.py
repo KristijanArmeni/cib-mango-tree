@@ -45,6 +45,8 @@ class NgramsDashboardPage(BaseDashboardPage):
     - Click a different point to switch selection
     """
 
+    _secondary_analyzer_id = ngram_stats_interface.id
+
     def __init__(self, session: GuiSession):
         super().__init__(session=session)
         # State for tracking selection
@@ -74,30 +76,6 @@ class NgramsDashboardPage(BaseDashboardPage):
         self._grid_content: ui.column | None = None
         self._sampling_label: ui.label | None = None
         self._show_all_btn: ui.button | None = None
-
-    def _get_parquet_path(self, output_id: str) -> str | None:
-        """
-        Get the path to a secondary output parquet file.
-
-        Args:
-            output_id: The output identifier (OUTPUT_NGRAM_STATS or OUTPUT_NGRAM_FULL)
-
-        Returns:
-            Path string or None if the analysis or its output files are missing.
-        """
-        analysis = self.session.current_analysis
-        if analysis is None:
-            return None
-
-        storage = self.session.app.context.storage
-        try:
-            return storage.get_secondary_output_parquet_path(
-                analysis,
-                ngram_stats_interface.id,
-                output_id,
-            )
-        except Exception:
-            return None
 
     def _get_top_n_summary(self, n: int = 100) -> pl.DataFrame:
         """
@@ -435,8 +413,8 @@ class NgramsDashboardPage(BaseDashboardPage):
             3. run.cpu_bound → build ECharts option (plots.plot_scatter_echart)
             4. Main thread   → push to UI
         """
-        stats_path = self._get_parquet_path(OUTPUT_NGRAM_STATS)
-        full_path = self._get_parquet_path(OUTPUT_NGRAM_FULL)
+        stats_path = self.get_output_parquet_path(OUTPUT_NGRAM_STATS)
+        full_path = self.get_output_parquet_path(OUTPUT_NGRAM_FULL)
 
         if stats_path is None:
             if self._chart_loading is not None:
