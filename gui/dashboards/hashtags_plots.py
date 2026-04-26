@@ -51,23 +51,17 @@ def plot_gini_echart(
         ECharts option dict ready for ui.echart().
     """
     is_hourly = _detect_is_hourly(df)
-    x_values = [
-        _format_date_for_axis(ts, is_hourly) for ts in df[OUTPUT_COL_TIMESPAN].to_list()
-    ]
-    y_values = df[OUTPUT_COL_GINI].to_list()
 
-    # Dynamic interval to show ~8-10 labels on x-axis
-    n_points = len(x_values)
-    interval = max(0, n_points // 9) if n_points > 10 else 0
-
-    # Build series data with both display label and machine-readable timestamp
+    # Build series data with datetime x values (time axis)
     series_data = [
         {
-            "value": [display_ts, gini],
+            "value": [ts, gini],
             "raw_ts": ts.strftime("%Y-%m-%d %H:%M"),
+            "display_ts": _format_date_for_axis(ts, is_hourly),
         }
-        for ts, display_ts, gini in zip(
-            df[OUTPUT_COL_TIMESPAN].to_list(), x_values, y_values
+        for ts, gini in zip(
+            df[OUTPUT_COL_TIMESPAN].to_list(),
+            df[OUTPUT_COL_GINI].to_list(),
         )
     ]
 
@@ -94,15 +88,18 @@ def plot_gini_echart(
     ]
 
     if smooth and "gini_smooth" in df.columns:
-        y_smooth = df["gini_smooth"].to_list()
+        # Filter out null values — rolling-window smoothing produces None at edges
         smooth_series_data = [
             {
-                "value": [display_ts, gini_s],
+                "value": [ts, gini_s],
                 "raw_ts": ts.strftime("%Y-%m-%d %H:%M"),
+                "display_ts": _format_date_for_axis(ts, is_hourly),
             }
-            for ts, display_ts, gini_s in zip(
-                df[OUTPUT_COL_TIMESPAN].to_list(), x_values, y_smooth
+            for ts, gini_s in zip(
+                df[OUTPUT_COL_TIMESPAN].to_list(),
+                df["gini_smooth"].to_list(),
             )
+            if gini_s is not None
         ]
         series.append(
             {
@@ -132,7 +129,8 @@ def plot_gini_echart(
             ":formatter": """function(params) {
                 if (!params || params.length === 0) return '';
                 var p = params[0];
-                var html = '<b>' + p.axisValue + '</b><br/>';
+                var displayTs = p.data ? p.data.display_ts : p.axisValue;
+                var html = '<b>' + displayTs + '</b><br/>';
                 for (var i = 0; i < params.length; i++) {
                     html += params[i].marker + params[i].seriesName + ': '
                           + params[i].value[1].toFixed(3) + '<br/>';
@@ -142,15 +140,19 @@ def plot_gini_echart(
         },
         "grid": {"left": 60, "right": 30, "top": 50, "bottom": 50},
         "xAxis": {
-            "type": "category",
-            "data": x_values,
+            "type": "time",
             "name": "Time window (start date)",
             "nameLocation": "middle",
             "nameGap": 30,
             "nameTextStyle": {"fontSize": 13},
             "axisLabel": {
                 "fontSize": 11,
-                "interval": interval,
+                ":formatter": """function(value) {
+                    var date = new Date(value);
+                    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return months[date.getMonth()] + ' ' + date.getDate() + ', ' + date.getFullYear();
+                }""",
             },
         },
         "yAxis": {
