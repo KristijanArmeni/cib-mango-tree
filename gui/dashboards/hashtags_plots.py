@@ -21,6 +21,21 @@ MANGO_DARK_ORANGE = "#f3921e"
 LIGHT_BLUE = "#acd7e5"
 
 
+def _format_date_for_axis(ts: datetime, is_hourly: bool) -> str:
+    """Format datetime for x-axis labels based on bin size."""
+    if is_hourly:
+        return ts.strftime("%b %d, %Y %H:%M")
+    return ts.strftime("%b %d, %Y")
+
+
+def _detect_is_hourly(df: pl.DataFrame) -> bool:
+    """Detect if the time bins are hourly (or smaller) vs daily."""
+    if len(df) < 2:
+        return False
+    time_step = df[OUTPUT_COL_TIMESPAN][1] - df[OUTPUT_COL_TIMESPAN][0]
+    return time_step.total_seconds() < 86400  # less than 1 day
+
+
 def plot_gini_echart(
     df: pl.DataFrame,
     smooth: bool = False,
@@ -35,38 +50,77 @@ def plot_gini_echart(
     Returns:
         ECharts option dict ready for ui.echart().
     """
+    is_hourly = _detect_is_hourly(df)
     x_values = [
-        ts.strftime("%Y-%m-%d %H:%M") for ts in df[OUTPUT_COL_TIMESPAN].to_list()
+        _format_date_for_axis(ts, is_hourly) for ts in df[OUTPUT_COL_TIMESPAN].to_list()
     ]
     y_values = df[OUTPUT_COL_GINI].to_list()
+
+    # Dynamic interval to show ~8-10 labels on x-axis
+    n_points = len(x_values)
+    interval = max(0, n_points // 9) if n_points > 10 else 0
+
+    # Build series data with both display label and machine-readable timestamp
+    series_data = [
+        {
+            "value": [display_ts, gini],
+            "raw_ts": ts.strftime("%Y-%m-%d %H:%M"),
+        }
+        for ts, display_ts, gini in zip(
+            df[OUTPUT_COL_TIMESPAN].to_list(), x_values, y_values
+        )
+    ]
 
     series = [
         {
             "name": "Gini coefficient",
             "type": "line",
-            "data": list(zip(x_values, y_values)),
+            "data": series_data,
             "lineStyle": {"color": "black", "width": 1.5},
+            "showSymbol": False,
             "symbol": "circle",
             "symbolSize": 4,
             "itemStyle": {"color": "black"},
             "emphasis": {
+                "showSymbol": True,
                 "itemStyle": {
-                    "color": MANGO_DARK_GREEN,
-                    "symbolSize": 8,
-                }
+                    "color": "#d62728",
+                    "symbolSize": 12,
+                    "shadowBlur": 10,
+                    "shadowColor": "rgba(0, 0, 0, 0.3)",
+                },
             },
         }
     ]
 
     if smooth and "gini_smooth" in df.columns:
         y_smooth = df["gini_smooth"].to_list()
+        smooth_series_data = [
+            {
+                "value": [display_ts, gini_s],
+                "raw_ts": ts.strftime("%Y-%m-%d %H:%M"),
+            }
+            for ts, display_ts, gini_s in zip(
+                df[OUTPUT_COL_TIMESPAN].to_list(), x_values, y_smooth
+            )
+        ]
         series.append(
             {
                 "name": "Smoothed",
                 "type": "line",
-                "data": list(zip(x_values, y_smooth)),
+                "data": smooth_series_data,
                 "lineStyle": {"color": MANGO_DARK_ORANGE, "width": 2},
-                "symbol": "none",
+                "itemStyle": {"color": MANGO_DARK_ORANGE},
+                "showSymbol": False,
+                "emphasis": {
+                    "showSymbol": True,
+                    "itemStyle": {
+                        "color": "#d62728",
+                        "symbolSize": 12,
+                        "shadowBlur": 10,
+                        "shadowColor": "rgba(0, 0, 0, 0.3)",
+                    },
+                },
             }
         )
 
@@ -95,11 +149,8 @@ def plot_gini_echart(
             "nameGap": 30,
             "nameTextStyle": {"fontSize": 13},
             "axisLabel": {
-                "rotate": 45,
                 "fontSize": 11,
-                ":formatter": """function(value) {
-                    return value.substring(0, 10);
-                }""",
+                "interval": interval,
             },
         },
         "yAxis": {
