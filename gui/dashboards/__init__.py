@@ -6,9 +6,9 @@ All dashboard pages inherit from BaseDashboardPage, which extends GuiPage.
 
 Modules:
     base_dashboard: BaseDashboardPage abstract base class
+    hashtags: HashtagsDashboardPage for the hashtags analyzer
     ngrams: NgramsDashboardPage for the n-grams analyzer
     placeholder: PlaceholderDashboard shown when no dashboard exists yet
-    hashtags: HashtagsDashboardPage for the hashtags analyzer
     temporal: TemporalDashboardPage for the temporal analyzer  (planned)
 """
 
@@ -17,8 +17,6 @@ from .hashtags import HashtagsDashboardPage
 from .ngrams import NgramsDashboardPage
 from .placeholder import PlaceholderDashboard
 
-# Maps primary analyzer IDs to their dashboard page classes.
-# Add an entry here when a new dashboard is implemented.
 _DASHBOARD_REGISTRY: dict[str, type[BaseDashboardPage]] = {
     "hashtags": HashtagsDashboardPage,
     "ngrams": NgramsDashboardPage,

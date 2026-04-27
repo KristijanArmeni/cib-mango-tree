@@ -6,7 +6,7 @@ from nicegui import ui
 
 from gui.session import GuiSession
 
-from .base_dashboard import BaseDashboardPage
+from ..base_dashboard import BaseDashboardPage
 
 
 class PlaceholderDashboard(BaseDashboardPage):

@@ -23,16 +23,16 @@ from analyzers.hashtags.hashtags_base.interface import (
     SECONDARY_COL_USERS_ALL,
 )
 from analyzers.hashtags.hashtags_web.analysis import secondary_analyzer
-from gui.dashboards.hashtags_data import (
+from gui.session import GuiSession
+
+from ..base_dashboard import BaseDashboardPage
+from .data import (
     USER_DATE_FORMAT,
     extract_users_for_hashtag,
     load_primary_output,
     load_transformed_raw_input,
 )
-from gui.dashboards.hashtags_plots import plot_gini_echart
-from gui.session import GuiSession
-
-from .base_dashboard import BaseDashboardPage
+from .plots import plot_gini_echart
 
 
 class HashtagsDashboardPage(BaseDashboardPage):
@@ -48,44 +48,36 @@ class HashtagsDashboardPage(BaseDashboardPage):
     def __init__(self, session: GuiSession):
         super().__init__(session=session)
 
-        # Data
         self._df_primary: pl.DataFrame | None = None
         self._df_raw: pl.DataFrame | None = None
         self._df_secondary: pl.DataFrame | None = None
         self._df_users: pl.DataFrame | None = None
         self._smooth: bool = False
 
-        # State
         self._selected_timewindow: datetime | None = None
         self._selected_hashtag: str | None = None
         self._selected_user: str | None = None
         self._selected_gini_data_index: int | None = None
 
-        # UI references - Gini plot
         self._gini_chart: ui.echart | None = None
         self._gini_loading: ui.column | None = None
         self._gini_content: ui.column | None = None
         self._smooth_checkbox: ui.checkbox | None = None
 
-        # UI references - Hashtag list
         self._hashtag_grid: ui.aggrid | None = None
         self._hashtag_loading: ui.column | None = None
         self._hashtag_content: ui.column | None = None
         self._hashtag_info: ui.label | None = None
 
-        # UI references - User list
         self._user_grid: ui.aggrid | None = None
         self._user_loading: ui.column | None = None
         self._user_content: ui.column | None = None
         self._user_info: ui.label | None = None
 
-        # UI references - Tweet explorer
         self._tweet_grid: ui.aggrid | None = None
         self._tweet_loading: ui.column | None = None
         self._tweet_content: ui.column | None = None
         self._tweet_info: ui.label | None = None
-
-    # -- Data loading -----------------------------------------------
 
     async def _load_and_render_async(self) -> None:
         try:
@@ -125,15 +117,12 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._show_content(self._gini_loading, self._gini_content)
 
     async def _load_raw_input(self) -> None:
-        """Load raw input data for tweet explorer (expensive, deferred)."""
         if self._df_raw is not None:
             return
         try:
             self._df_raw = await run.io_bound(load_transformed_raw_input, self.session)
         except Exception as exc:
             self.notify_error(f"Could not load raw input data: {exc}")
-
-    # -- Gini plot handlers -----------------------------------------
 
     def _handle_smooth_change(self, e) -> None:
         self._smooth = e.value
@@ -153,7 +142,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         return None
 
     def _draw_vertical_marker(self, raw_ts: str) -> None:
-        """Draw a vertical markLine at the selected time position."""
         if self._gini_chart is None:
             return
         self._gini_chart.run_chart_method(
@@ -179,7 +167,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         )
 
     def _clear_vertical_marker(self) -> None:
-        """Remove the vertical markLine from the chart."""
         if self._gini_chart is None:
             return
         self._gini_chart.run_chart_method(
@@ -189,7 +176,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         )
 
     def _handle_gini_click(self, e) -> None:
-        """Handle click on Gini line plot point."""
         clicked_data = e.data
         if clicked_data is None:
             return
@@ -235,7 +221,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         ui.timer(0, self._run_secondary_analysis, once=True)
 
     async def _run_secondary_analysis(self) -> None:
-        """Run secondary analysis for selected timewindow and populate hashtag list."""
         if self._df_primary is None or self._selected_timewindow is None:
             return
 
@@ -265,10 +250,7 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._show_content(self._hashtag_loading, self._hashtag_content)
         self._update_hashtag_info()
 
-    # -- Hashtag list handlers --------------------------------------
-
     def _update_hashtag_grid(self) -> None:
-        """Populate hashtag ranked list."""
         if self._hashtag_grid is None or self._df_secondary is None:
             return
 
@@ -313,7 +295,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._hashtag_grid.update()
 
     def _handle_hashtag_click(self, e) -> None:
-        """Handle click on hashtag row."""
         data = e.args
         if not data or "data" not in data:
             return
@@ -334,7 +315,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._update_user_info()
 
     def _update_hashtag_info(self) -> None:
-        """Update info label for hashtag panel."""
         if self._hashtag_info is None:
             return
 
@@ -351,10 +331,7 @@ class HashtagsDashboardPage(BaseDashboardPage):
                 f"{n_hashtags} hashtags found in window starting {date_str}"
             )
 
-    # -- User list handlers -----------------------------------------
-
     def _update_user_grid(self) -> None:
-        """Populate user ranked list for selected hashtag."""
         if (
             self._user_grid is None
             or self._df_secondary is None
@@ -381,7 +358,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
             self._show_content(self._user_loading, self._user_content)
 
     def _handle_user_click(self, e) -> None:
-        """Handle click on user row."""
         data = e.args
         if not data or "data" not in data:
             return
@@ -398,7 +374,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         ui.timer(0, self._load_tweets, once=True)
 
     def _update_user_info(self) -> None:
-        """Update info label for user panel."""
         if self._user_info is None:
             return
 
@@ -411,7 +386,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
             self._user_info.text = "Loading user data..."
 
     def _clear_user_grid(self) -> None:
-        """Clear user grid and reset state."""
         self._selected_user = None
         self._df_users = None
         if self._user_grid is not None:
@@ -422,10 +396,7 @@ class HashtagsDashboardPage(BaseDashboardPage):
         if self._user_loading is not None:
             self._show_error(self._user_loading, "Select a hashtag to see users.")
 
-    # -- Tweet explorer handlers ------------------------------------
-
     async def _load_tweets(self) -> None:
-        """Load tweets for selected user/hashtag/timewindow."""
         if (
             self._selected_user is None
             or self._selected_hashtag is None
@@ -480,7 +451,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         time_start: datetime,
         time_end: datetime,
     ) -> pl.DataFrame:
-        """Filter raw tweets for user, hashtag, and time window."""
         return (
             df_raw.filter(
                 pl.col(COL_AUTHOR_ID) == user,
@@ -493,7 +463,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         )
 
     def _update_tweet_grid(self, df_tweets: pl.DataFrame) -> None:
-        """Populate tweet explorer grid."""
         if self._tweet_grid is None:
             return
 
@@ -518,7 +487,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._tweet_grid.update()
 
     def _update_tweet_info(self, count: int) -> None:
-        """Update info label for tweet panel."""
         timewindow_end = self._selected_timewindow + self._get_time_step()
         date_end = timewindow_end.strftime(USER_DATE_FORMAT)
         date_start = self._selected_timewindow.strftime(USER_DATE_FORMAT)
@@ -527,7 +495,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._tweet_info.text = f"{count} posts found for account {self._selected_user} between {date_start} and {date_end}"
 
     def _clear_tweet_grid(self) -> None:
-        """Clear tweet grid and reset state."""
         self._selected_user = None
         if self._tweet_grid is not None:
             self._tweet_grid.options["rowData"] = []
@@ -539,7 +506,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
             self._show_error(self._tweet_loading, "Select a user to see their posts.")
 
     def _get_time_step(self):
-        """Calculate time step from primary output."""
         if self._df_primary is None or len(self._df_primary) < 2:
             return None
         return (
@@ -547,10 +513,7 @@ class HashtagsDashboardPage(BaseDashboardPage):
             - self._df_primary[OUTPUT_COL_TIMESPAN][0]
         )
 
-    # -- Rendering --------------------------------------------------
-
     def render_content(self) -> None:
-        """Render the dashboard with ranked lists layout."""
         ui.add_css(
             """
             .ag-row {
@@ -563,7 +526,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
         )
         with ui.row().classes("w-full justify-center"):
             with ui.column().classes("w-3/4 q-pa-md gap-4"):
-                # -- Gini line plot ----------------------------------
                 with ui.card().classes("w-full"):
                     with ui.row().classes("w-full items-center"):
                         self._smooth_checkbox = ui.checkbox(
@@ -584,9 +546,7 @@ class HashtagsDashboardPage(BaseDashboardPage):
                             .style("height: 350px")
                         )
 
-                # -- Middle row: Hashtag list + User list ------------
                 with ui.row().classes("w-full gap-4"):
-                    # Hashtag ranked list
                     with ui.card().classes("flex-1"):
                         with ui.card_section():
                             ui.label("Hashtags").classes("text-h6")
@@ -621,7 +581,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
                                 "cellClicked", self._handle_hashtag_click
                             )
 
-                    # User ranked list
                     with ui.card().classes("flex-1"):
                         with ui.card_section():
                             ui.label("Users").classes("text-h6")
@@ -654,7 +613,6 @@ class HashtagsDashboardPage(BaseDashboardPage):
                             )
                             self._user_grid.on("cellClicked", self._handle_user_click)
 
-                # -- Tweet Explorer ----------------------------------
                 with ui.card().classes("w-full"):
                     with ui.card_section():
                         ui.label("Tweet Explorer").classes("text-h6")
