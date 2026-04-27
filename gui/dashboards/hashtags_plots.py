@@ -138,7 +138,7 @@ def plot_gini_echart(
                 return html;
             }""",
         },
-        "grid": {"left": 60, "right": 30, "top": 50, "bottom": 50},
+        "grid": {"left": 60, "right": 30, "top": 70, "bottom": 50},
         "xAxis": {
             "type": "time",
             "name": "Time window (start date)",
