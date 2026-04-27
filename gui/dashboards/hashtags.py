@@ -59,6 +59,7 @@ class HashtagsDashboardPage(BaseDashboardPage):
         self._selected_timewindow: datetime | None = None
         self._selected_hashtag: str | None = None
         self._selected_user: str | None = None
+        self._selected_gini_data_index: int | None = None
 
         # UI references - Gini plot
         self._gini_chart: ui.echart | None = None
@@ -136,10 +137,56 @@ class HashtagsDashboardPage(BaseDashboardPage):
 
     def _handle_smooth_change(self, e) -> None:
         self._smooth = e.value
+        self._selected_gini_data_index = None
         if self._gini_chart is not None and self._df_primary is not None:
             option = plot_gini_echart(self._df_primary, smooth=self._smooth)
             self._gini_chart.options.update(option)
             self._gini_chart.update()
+
+    def _get_raw_data_index(self, raw_ts: str) -> int | None:
+        if self._df_primary is None:
+            return None
+        ts_list = self._df_primary[OUTPUT_COL_TIMESPAN].to_list()
+        for i, ts in enumerate(ts_list):
+            if ts.strftime("%Y-%m-%d %H:%M") == raw_ts:
+                return i
+        return None
+
+    def _draw_vertical_marker(self, raw_ts: str) -> None:
+        """Draw a vertical markLine at the selected time position."""
+        if self._gini_chart is None:
+            return
+        self._gini_chart.run_chart_method(
+            "setOption",
+            {
+                "series": [
+                    {
+                        "markLine": {
+                            "silent": True,
+                            "symbol": "none",
+                            "animation": False,
+                            "lineStyle": {"color": "#d62728", "width": 2},
+                            "label": {
+                                "position": "end",
+                                "distance": 10,
+                            },
+                            "data": [{"xAxis": raw_ts}],
+                        }
+                    }
+                ]
+            },
+            False,
+        )
+
+    def _clear_vertical_marker(self) -> None:
+        """Remove the vertical markLine from the chart."""
+        if self._gini_chart is None:
+            return
+        self._gini_chart.run_chart_method(
+            "setOption",
+            {"series": [{"markLine": {"data": []}}]},
+            False,
+        )
 
     def _handle_gini_click(self, e) -> None:
         """Handle click on Gini line plot point."""
@@ -156,10 +203,28 @@ class HashtagsDashboardPage(BaseDashboardPage):
         except ValueError:
             return
 
-        if self._selected_timewindow == timewindow:
+        data_index = self._get_raw_data_index(raw_ts)
+        if data_index is None:
             return
 
+        if self._selected_timewindow == timewindow:
+            if self._selected_gini_data_index is not None:
+                self._clear_vertical_marker()
+            self._selected_timewindow = None
+            self._selected_gini_data_index = None
+            self._selected_hashtag = None
+            self._selected_user = None
+            self._update_hashtag_info()
+            self._clear_user_grid()
+            self._clear_tweet_grid()
+            return
+
+        if self._selected_gini_data_index is not None:
+            self._clear_vertical_marker()
+
         self._selected_timewindow = timewindow
+        self._selected_gini_data_index = data_index
+        self._draw_vertical_marker(raw_ts)
         self._selected_hashtag = None
         self._selected_user = None
 
