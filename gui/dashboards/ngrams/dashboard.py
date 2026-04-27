@@ -10,11 +10,6 @@ import polars as pl
 from nicegui import run, ui
 
 from analyzers.ngrams.ngrams_stats.interface import (
-    COL_AUTHOR_ID,
-    COL_MESSAGE_TEXT,
-    COL_MESSAGE_TIMESTAMP,
-    COL_NGRAM_DISTINCT_POSTER_COUNT,
-    COL_NGRAM_TOTAL_REPS,
     COL_NGRAM_WORDS,
     OUTPUT_NGRAM_FULL,
     OUTPUT_NGRAM_STATS,

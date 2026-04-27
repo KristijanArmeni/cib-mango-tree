@@ -1,7 +1,7 @@
 """
 Hashtags analyzer dashboard page.
 
-Layout (Option A - Ranked Lists):
+Layout:
 - Top: Gini line plot (full width) — click to select time window
 - Middle-left: Hashtag ranked list (AG-Grid) — click row to select hashtag
 - Middle-right: User ranked list (AG-Grid) — click row to select user
